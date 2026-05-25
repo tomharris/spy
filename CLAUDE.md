@@ -112,8 +112,13 @@ DM opens always go through `conversations.open` so we get the stable channel ID,
 - **File permissions:** anything containing tokens is `0600`, parent dirs `0700`. The cache and config writers already do this — match them.
 - **`internal/slack` must not import `cmd/`**. The `runX` functions exist precisely so the planned MCP server can call into the same logic without going through cobra.
 
-## Currently ported / not yet ported
+## Status
 
-Working: `auth`, `workspaces` (+ `use`, `refresh`), `channels` (`ch`), `users` (`u`), `dms` (`dm`), `read` (`r`).
+All commands are ported: `auth`, `workspaces` (+ `use`, `refresh`), `channels` (`ch`), `users` (`u`), `dms` (`dm`), `read` (`r`), `send` (`s`), `search`, `thread` (`t`), `react`, `pins` (`pin`), `activity` (`a`), `unread` (`ur`), `starred` (`star`), `saved` (`sv`), `drafts` + `draft <ch> <msg>` / `draft thread` / `draft user` / `draft drop`.
 
-Not yet ported: `send`, `search`, `thread`, `react`, `activity`, `unread`, `starred`, `saved`, `pins`, drafts subcommands. MCP server mode (`spy mcp`) is also planned but not started.
+Still planned: MCP server mode (`spy mcp`), which is the whole reason the cobra commands are split into `runX(ctx, deps...) (*xResult, error)` + cobra wrapper — the MCP server will reuse the `runX` functions directly without going through cobra.
+
+Gotchas worth remembering:
+- `drafts.delete` uses optimistic concurrency on `client_last_updated_ts`. Echoing back the value from `drafts.list` reliably hits `draft_has_conflict` because the user's running Slack desktop keeps bumping the server ts. Send `time.Now()` as a float instead — see `runDraftDrop`.
+- `all_notifications_prefs` from `users.prefs.get` comes back as either a JSON-encoded string or a nested object depending on workspace. `parseMaybeStringJSON` in `cmd/spy/activity.go` handles both.
+- `search.messages` returns matches under `messages.matches` (nested envelope), not a top-level `messages` array — it does not share the `historyResponse` shape.

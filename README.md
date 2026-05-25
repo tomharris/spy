@@ -43,20 +43,50 @@ The first command you run will trigger a macOS Keychain prompt asking permission
 
 ## Commands
 
+### Read
+
 | Command | Alias | What it does |
 | --- | --- | --- |
 | `spy auth` | | Verify auth and print workspace/user info |
-| `spy workspaces` | | List every signed-in workspace |
-| `spy workspaces use <id>` | | Set the default workspace |
-| `spy workspaces refresh` | | Re-extract tokens from the Slack app |
 | `spy channels` | `ch` | List public + private channels |
 | `spy users` | `u` | List workspace users |
-| `spy dms` | `dm` | List direct-message conversations |
+| `spy dms` | `dm` | List DM conversations |
 | `spy read <channel\|@user> [count]` | `r` | Read recent messages |
+| `spy thread <channel> <ts> [count]` | `t` | Read replies in a thread |
+| `spy search <query...> [count]` | | Search messages workspace-wide |
+| `spy pins <channel>` | `pin` | List pinned items |
+| `spy activity` | `a` | Unread + mention counts everywhere |
+| `spy unread` | `ur` | Same as activity but unreads-only, excludes muted |
+| `spy starred` | `star` | VIP users + starred items |
+| `spy saved [count]` | `sv` | Saved-for-later items (`--all` includes completed) |
 
-`spy read` accepts a channel name (`general`, `#general`), a user (`@anjali`, `anjali`), a user ID (`U01…`), or a channel/DM ID directly. It also supports `--ts` (show raw Slack timestamps), `--threads` (auto-expand all threads inline), and `--from`/`--to YYYY-MM-DD` (strict — invalid dates fail loudly instead of being silently coerced).
+### Write
 
-More commands (`send`, `search`, `react`, `activity`, drafts, ...) are being ported from the Node.js predecessor and will arrive in subsequent releases.
+| Command | Alias | What it does |
+| --- | --- | --- |
+| `spy send <channel\|@user> <msg...>` | `s` | Send a message |
+| `spy react <channel> <ts> <emoji>` | | Add an emoji reaction |
+| `spy draft <channel> <msg...>` | | Save a draft (appears in Slack UI) |
+| `spy draft thread <channel> <ts> <msg...>` | | Save a draft thread reply |
+| `spy draft user <user> <msg...>` | | Save a draft DM |
+| `spy draft drop <draft_id>` | | Delete a draft |
+| `spy drafts` | | List active drafts |
+
+### Workspaces
+
+| Command | What it does |
+| --- | --- |
+| `spy workspaces` | List every signed-in workspace |
+| `spy workspaces use <id>` | Set the default workspace |
+| `spy workspaces refresh` | Re-extract tokens from the Slack app |
+
+### Channel references
+
+Anywhere a command takes a `<channel>` it accepts: a channel name (`general`, `#general`), a user handle (`@anjali`, `anjali`), a user ID (`U01…`), or a channel/DM ID directly (`C01…`, `D01…`).
+
+### Read flags
+
+`spy read` supports `--ts` (show raw Slack timestamps — useful to copy for `thread`/`react`), `--threads` (auto-expand all threads inline), and `--from`/`--to YYYY-MM-DD` (strict — invalid dates fail loudly instead of being silently coerced).
 
 ## Workspaces
 
