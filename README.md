@@ -80,6 +80,12 @@ The first command you run will trigger a macOS Keychain prompt asking permission
 | `spy workspaces use <id>` | Set the default workspace |
 | `spy workspaces refresh` | Re-extract tokens from the Slack app |
 
+### MCP server
+
+| Command | What it does |
+| --- | --- |
+| `spy mcp` | Run as an MCP server (stdio) exposing every read/write command as a tool |
+
 ### Channel references
 
 Anywhere a command takes a `<channel>` it accepts: a channel name (`general`, `#general`), a user handle (`@anjali`, `anjali`), a user ID (`U01…`), or a channel/DM ID directly (`C01…`, `D01…`).
@@ -114,6 +120,32 @@ Every command accepts `--json` for scripting:
 spy ch --json | jq '.channels[] | select(.is_private) | .name'
 spy r general 100 --json --from 2026-05-20 | jq '.messages | length'
 ```
+
+## Use as an MCP server
+
+`spy mcp` runs over stdio and exposes every read/write command as a tool, so you can wire it up to Claude Desktop, Claude Code, or any other MCP-aware client. The server picks one workspace at startup using the same rules as the CLI; launch separate processes if you want more than one.
+
+Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "spy": {
+      "command": "/absolute/path/to/spy",
+      "args": ["mcp"],
+      "env": { "SPY_WORKSPACE": "acme" }
+    }
+  }
+}
+```
+
+Claude Code (`claude mcp add`):
+
+```bash
+claude mcp add spy /absolute/path/to/spy mcp -e SPY_WORKSPACE=acme
+```
+
+The server registers tools for every read command (`auth`, `channels`, `users`, `dms`, `read`, `thread`, `search`, `pins`, `activity`, `unread`, `starred`, `saved`, `drafts_list`) and every write command (`send`, `react`, `draft_channel`, `draft_thread`, `draft_user`, `draft_drop`). Tool arguments mirror the CLI flags; channel references accept the same forms (names, `@handle`, user IDs, channel IDs).
 
 ## How it works
 

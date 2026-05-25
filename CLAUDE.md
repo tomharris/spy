@@ -110,15 +110,23 @@ DM opens always go through `conversations.open` so we get the stable channel ID,
 - **Dates are strict `YYYY-MM-DD`.** `read.go`'s `parseDate` uses `time.Parse("2006-01-02", s)` and errors loudly. The JS predecessor silently produced `NaN` for malformed dates — don't reintroduce that.
 - **Slack returns history newest-first.** `read.go` reverses before rendering so output reads top-to-bottom in time order. Apply the same reversal to any new "show me messages" command.
 - **File permissions:** anything containing tokens is `0600`, parent dirs `0700`. The cache and config writers already do this — match them.
-- **`internal/slack` must not import `cmd/`**. The `runX` functions exist precisely so the planned MCP server can call into the same logic without going through cobra.
+- **`internal/slack` must not import `cmd/`**. The `runX` functions exist so `cmd/spy/mcp.go` can call into the same logic without going through cobra.
+
+## MCP server (`spy mcp`)
+
+`cmd/spy/mcp.go` is a thin adapter that wraps every `runX` function as an MCP tool over stdio, using `github.com/modelcontextprotocol/go-sdk`. One workspace per server: it calls `newClientResolver()` once at startup and reuses the bound client/resolver for every tool call.
+
+- Tool names are flat (`auth`, `channels`, `read`, `send`, `draft_channel`, `draft_drop`, …) — no slash-separated namespaces.
+- Argument structs use `jsonschema:"description"` struct tags; the SDK auto-generates input schemas. Fields tagged `,omitempty` are optional, everything else is required.
+- Output structs reuse the same `runX` result types, which gives clients a real `outputSchema` to validate against. Exception: `read` and `thread` use `Out=any` because `message.Replies []message` is self-referential and trips the jsonschema-go cycle detector. The JSON `content` is still returned; just no output schema.
+- Don't call `newClient()` from inside a tool handler — the resolver is captured at startup, so `--workspace`/`SPY_WORKSPACE` is fixed for the process lifetime. Launch separate processes for multiple workspaces.
 
 ## Status
 
-All commands are ported: `auth`, `workspaces` (+ `use`, `refresh`), `channels` (`ch`), `users` (`u`), `dms` (`dm`), `read` (`r`), `send` (`s`), `search`, `thread` (`t`), `react`, `pins` (`pin`), `activity` (`a`), `unread` (`ur`), `starred` (`star`), `saved` (`sv`), `drafts` + `draft <ch> <msg>` / `draft thread` / `draft user` / `draft drop`.
-
-Still planned: MCP server mode (`spy mcp`), which is the whole reason the cobra commands are split into `runX(ctx, deps...) (*xResult, error)` + cobra wrapper — the MCP server will reuse the `runX` functions directly without going through cobra.
+All commands ported, plus `spy mcp`.
 
 Gotchas worth remembering:
 - `drafts.delete` uses optimistic concurrency on `client_last_updated_ts`. Echoing back the value from `drafts.list` reliably hits `draft_has_conflict` because the user's running Slack desktop keeps bumping the server ts. Send `time.Now()` as a float instead — see `runDraftDrop`.
 - `all_notifications_prefs` from `users.prefs.get` comes back as either a JSON-encoded string or a nested object depending on workspace. `parseMaybeStringJSON` in `cmd/spy/activity.go` handles both.
 - `search.messages` returns matches under `messages.matches` (nested envelope), not a top-level `messages` array — it does not share the `historyResponse` shape.
+- The MCP `read`/`thread` tools have `Out=any` to dodge a schema-inference cycle on `message.Replies`. If you add another command whose result transitively references itself, do the same.
