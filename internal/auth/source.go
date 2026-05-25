@@ -6,14 +6,16 @@ import (
 	"path/filepath"
 )
 
-// Source describes where Slack credentials live on disk and where we cache them.
+// Source describes where Slack credentials live on disk and where we
+// cache discovered workspaces.
 type Source struct {
-	SlackDir   string
-	IsAppStore bool
-	CookiesDB  string
-	LevelDBDir string
-	CacheDir   string
-	CachePath  string
+	SlackDir      string
+	IsAppStore    bool
+	CookiesDB     string
+	LevelDBDir    string
+	CacheDir      string
+	ConfigPath    string
+	WorkspacesDir string
 }
 
 // DefaultSource probes the two standard macOS Slack data directories
@@ -47,13 +49,19 @@ func DefaultSource() (*Source, error) {
 
 	cacheDir := filepath.Join(home, ".local", "spy")
 	return &Source{
-		SlackDir:   slackDir,
-		IsAppStore: isAppStore,
-		CookiesDB:  filepath.Join(slackDir, "Cookies"),
-		LevelDBDir: filepath.Join(slackDir, "Local Storage", "leveldb"),
-		CacheDir:   cacheDir,
-		CachePath:  filepath.Join(cacheDir, "token-cache.json"),
+		SlackDir:      slackDir,
+		IsAppStore:    isAppStore,
+		CookiesDB:     filepath.Join(slackDir, "Cookies"),
+		LevelDBDir:    filepath.Join(slackDir, "Local Storage", "leveldb"),
+		CacheDir:      cacheDir,
+		ConfigPath:    filepath.Join(cacheDir, "config.json"),
+		WorkspacesDir: filepath.Join(cacheDir, "workspaces"),
 	}, nil
+}
+
+// WorkspaceCachePath returns the path to a specific workspace's cache file.
+func (s *Source) WorkspaceCachePath(teamID string) string {
+	return filepath.Join(s.WorkspacesDir, teamID+".json")
 }
 
 func dirExists(p string) bool {

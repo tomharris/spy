@@ -17,31 +17,48 @@ import (
 
 const baseURL = "https://slack.com/api"
 
-// Client is an authenticated Slack Web API client. Safe for concurrent use.
+// Client is an authenticated Slack Web API client bound to a single
+// workspace. Safe for concurrent use.
 //
-// The client caches a *auth.Credentials in memory; on `invalid_auth` it
-// re-extracts via auth.GetCredentials(src, true) and retries the request
-// once. Rate-limited responses (HTTP 429) are honored via Retry-After.
+// On `invalid_auth` the client re-extracts workspaces from Slack
+// (auth.ListWorkspaces(src, true)) and looks for the same team_id —
+// covering the case where the user signed out and back in, rotating the
+// xoxc token but keeping the team identity. Rate-limited responses
+// (HTTP 429) are honored via Retry-After.
 type Client struct {
 	httpClient *http.Client
 	src        *auth.Source
 
-	mu    sync.RWMutex
-	creds *auth.Credentials
+	mu        sync.RWMutex
+	workspace *auth.Workspace
+	cookie    string
 }
 
-// NewClient creates a Slack client. If forceRefresh is true, the on-disk
-// token cache is bypassed and credentials are re-extracted from Slack.
-func NewClient(src *auth.Source, forceRefresh bool) (*Client, error) {
-	creds, err := auth.GetCredentials(src, forceRefresh)
+// NewClient creates a Slack client for the given workspace. The shared
+// account cookie is decrypted lazily here so callers don't pay for it
+// just to construct a client.
+func NewClient(src *auth.Source, workspace *auth.Workspace) (*Client, error) {
+	if workspace == nil {
+		return nil, fmt.Errorf("workspace is required")
+	}
+	cookie, err := auth.SharedCookie(src)
 	if err != nil {
 		return nil, err
 	}
 	return &Client{
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		src:        src,
-		creds:      creds,
+		workspace:  workspace,
+		cookie:     cookie,
 	}, nil
+}
+
+// Workspace returns the workspace this client is bound to.
+func (c *Client) Workspace() *auth.Workspace {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	ws := *c.workspace
+	return &ws
 }
 
 // Call invokes method with params and decodes the response into out.
@@ -152,18 +169,23 @@ func (c *Client) buildRequest(ctx context.Context, verb Verb, method string, par
 func (c *Client) snapshotCreds() *auth.Credentials {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.creds
+	return c.workspace.Credentials(c.cookie)
 }
 
 func (c *Client) refreshCredentials() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	creds, err := auth.GetCredentials(c.src, true)
+	workspaces, err := auth.ListWorkspaces(c.src, true)
 	if err != nil {
 		return err
 	}
-	c.creds = creds
-	return nil
+	for i := range workspaces {
+		if workspaces[i].TeamID == c.workspace.TeamID {
+			c.workspace = &workspaces[i]
+			return nil
+		}
+	}
+	return fmt.Errorf("workspace %s (%s) no longer signed in", c.workspace.TeamDomain, c.workspace.TeamID)
 }
 
 // parseRetryAfter accepts both seconds ("5") and HTTP-date forms.

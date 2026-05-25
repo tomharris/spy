@@ -8,12 +8,6 @@ import (
 	"time"
 )
 
-// Credentials is a validated Slack session pair.
-type Credentials struct {
-	Token  string
-	Cookie string
-}
-
 // TestResult mirrors the auth.test Slack response we care about.
 type TestResult struct {
 	Ok     bool   `json:"ok"`

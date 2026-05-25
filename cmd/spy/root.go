@@ -14,9 +14,12 @@ import (
 )
 
 var (
-	flagJSON    bool
-	flagRefresh bool
+	flagJSON      bool
+	flagRefresh   bool
+	flagWorkspace string
 )
+
+const workspaceEnvVar = "SPY_WORKSPACE"
 
 var rootCmd = &cobra.Command{
 	Use:           "spy",
@@ -27,7 +30,9 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&flagJSON, "json", false, "emit JSON output")
-	rootCmd.PersistentFlags().BoolVar(&flagRefresh, "refresh", false, "skip cached token and re-extract from Slack")
+	rootCmd.PersistentFlags().BoolVar(&flagRefresh, "refresh", false, "force re-discovery of workspaces (bypasses cache)")
+	rootCmd.PersistentFlags().StringVarP(&flagWorkspace, "workspace", "w", "",
+		"workspace to target — team domain or team_id (env: "+workspaceEnvVar+")")
 }
 
 // Execute is the entry point called from main().
@@ -37,14 +42,37 @@ func Execute() error {
 	return rootCmd.ExecuteContext(ctx)
 }
 
-// newClient builds an authenticated Slack client honoring --refresh.
-// Subcommands call this lazily so `spy --help` doesn't touch the keychain.
+// newClient resolves the target workspace (--workspace > SPY_WORKSPACE >
+// configured default > only signed-in workspace) and returns a Slack
+// client bound to it. Honors --refresh by pre-discovering workspaces.
+//
+// Subcommands call this lazily so `spy --help` never touches the keychain.
 func newClient() (*slack.Client, error) {
 	src, err := auth.DefaultSource()
 	if err != nil {
 		return nil, err
 	}
-	return slack.NewClient(src, flagRefresh)
+	if flagRefresh {
+		if _, err := auth.ListWorkspaces(src, true); err != nil {
+			return nil, err
+		}
+	}
+	ws, err := resolveTargetWorkspace(src)
+	if err != nil {
+		return nil, err
+	}
+	return slack.NewClient(src, ws)
+}
+
+func resolveTargetWorkspace(src *auth.Source) (*auth.Workspace, error) {
+	id := flagWorkspace
+	if id == "" {
+		id = os.Getenv(workspaceEnvVar)
+	}
+	if id != "" {
+		return auth.ResolveWorkspace(src, id)
+	}
+	return auth.DefaultWorkspace(src)
 }
 
 // emitJSON writes v as indented JSON to stdout. Used by every subcommand's

@@ -35,10 +35,11 @@ var authCmd = &cobra.Command{
 		if flagJSON {
 			return emitJSON(res)
 		}
+		ws := client.Workspace()
 		fmt.Printf("authenticated as %s @ %s\n", res.User, res.Team)
-		fmt.Printf("  team id: %s\n", res.TeamID)
-		fmt.Printf("  user id: %s\n", res.UserID)
-		fmt.Printf("  url:     %s\n", res.URL)
+		fmt.Printf("  workspace: %s  (%s)\n", ws.TeamDomain, ws.TeamID)
+		fmt.Printf("  user id:   %s\n", res.UserID)
+		fmt.Printf("  url:       %s\n", res.URL)
 		return nil
 	},
 }
