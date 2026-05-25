@@ -167,3 +167,31 @@ Resolved user and channel lists are cached per-workspace for 5 minutes at `~/.lo
 `spy` reads files that already exist on your machine and never sends them anywhere except to Slack's own API, using credentials you already authorized when you signed in to the Slack app. There is no telemetry and no third-party service in the loop. The on-disk cache contains your tokens — treat `~/.local/spy/` like you would any other credential store.
 
 This project is not affiliated with or endorsed by Slack Technologies.
+
+## License
+
+Released under the [MIT License](LICENSE).
+
+```
+MIT License
+
+Copyright (c) 2026 Tom Harris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
