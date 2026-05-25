@@ -61,6 +61,10 @@ func (c *Client) Workspace() *auth.Workspace {
 	return &ws
 }
 
+// Source returns the auth.Source the client was built with. Useful for
+// constructing helpers (resolver, cache) that share workspace paths.
+func (c *Client) Source() *auth.Source { return c.src }
+
 // Call invokes method with params and decodes the response into out.
 //
 // out must be a pointer to a struct that embeds BaseResponse (so the client

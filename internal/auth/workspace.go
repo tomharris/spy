@@ -244,10 +244,10 @@ func loadAllWorkspaces(src *Source) ([]Workspace, error) {
 
 	var out []Workspace
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+		if !e.IsDir() {
 			continue
 		}
-		ws, err := loadWorkspace(src, strings.TrimSuffix(e.Name(), ".json"))
+		ws, err := loadWorkspace(src, e.Name())
 		if err != nil {
 			continue
 		}
@@ -270,7 +270,7 @@ func loadWorkspace(src *Source, teamID string) (*Workspace, error) {
 }
 
 func saveWorkspace(src *Source, ws *Workspace) error {
-	if err := os.MkdirAll(src.WorkspacesDir, 0o700); err != nil {
+	if err := os.MkdirAll(src.WorkspaceDir(ws.TeamID), 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(ws, "", "  ")

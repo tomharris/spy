@@ -59,9 +59,15 @@ func DefaultSource() (*Source, error) {
 	}, nil
 }
 
-// WorkspaceCachePath returns the path to a specific workspace's cache file.
+// WorkspaceDir returns the directory holding a workspace's metadata file
+// and per-workspace caches (users.json, channels.json, ...).
+func (s *Source) WorkspaceDir(teamID string) string {
+	return filepath.Join(s.WorkspacesDir, teamID)
+}
+
+// WorkspaceCachePath returns the path to a workspace's identity/token file.
 func (s *Source) WorkspaceCachePath(teamID string) string {
-	return filepath.Join(s.WorkspacesDir, teamID+".json")
+	return filepath.Join(s.WorkspaceDir(teamID), "workspace.json")
 }
 
 func dirExists(p string) bool {

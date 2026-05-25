@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/tomharris/spy/internal/auth"
+	"github.com/tomharris/spy/internal/resolve"
 	"github.com/tomharris/spy/internal/slack"
 )
 
@@ -62,6 +63,21 @@ func newClient() (*slack.Client, error) {
 		return nil, err
 	}
 	return slack.NewClient(src, ws)
+}
+
+// newClientResolver returns the slack client + a resolver wired to the
+// same workspace. Honors --refresh by also invalidating the workspace's
+// users/channels caches.
+func newClientResolver() (*slack.Client, *resolve.Resolver, error) {
+	client, err := newClient()
+	if err != nil {
+		return nil, nil, err
+	}
+	r := resolve.New(client, client.Source())
+	if flagRefresh {
+		r.InvalidateAll()
+	}
+	return client, r, nil
 }
 
 func resolveTargetWorkspace(src *auth.Source) (*auth.Workspace, error) {
