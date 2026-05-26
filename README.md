@@ -1,6 +1,6 @@
 # spy
 
-A macOS Slack CLI that auto-authenticates from your already-signed-in Slack desktop app. No OAuth, no app install, no token entry.
+A macOS + Linux Slack CLI that auto-authenticates from your already-signed-in Slack desktop app. No OAuth, no app install, no token entry.
 
 ```
 $ spy auth
@@ -25,8 +25,10 @@ $ spy r general 5
 
 ## Requirements
 
-- macOS (only — the auth flow reads the Slack desktop app's local data)
-- Slack for Mac, signed in to at least one workspace (App Store or direct download both work)
+- macOS or Linux (the auth flow reads the Slack desktop app's local data)
+- Slack desktop, signed in to at least one workspace:
+  - **macOS** — App Store or direct-download build
+  - **Linux** — native (`.deb`/`.rpm`), Snap, or Flatpak build
 - Go 1.21+ to build from source
 
 ## Install
@@ -39,7 +41,9 @@ go build -o bin/spy ./cmd/spy
 go install ./cmd/spy
 ```
 
-The first command you run will trigger a macOS Keychain prompt asking permission to read the "Slack Safe Storage" entry. Click **Always Allow** — otherwise every subsequent invocation will prompt again.
+On **macOS**, the first command you run triggers a Keychain prompt asking permission to read the "Slack Safe Storage" entry. Click **Always Allow** — otherwise every subsequent invocation will prompt again.
+
+On **Linux**, if your login keyring is locked you may get a one-time unlock dialog the first time `spy` reads a `v11`-encrypted cookie. Cookies with the older `v10` ("peanuts") encryption need no prompt at all.
 
 ## Commands
 
@@ -125,7 +129,7 @@ spy r general 100 --json --from 2026-05-20 | jq '.messages | length'
 
 `spy mcp` runs over stdio and exposes every read/write command as a tool, so you can wire it up to Claude Desktop, Claude Code, or any other MCP-aware client. The server picks one workspace at startup using the same rules as the CLI; launch separate processes if you want more than one.
 
-Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Claude Desktop (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; Linux: `~/.config/Claude/claude_desktop_config.json`):
 
 ```json
 {
@@ -149,14 +153,21 @@ The server registers tools for every read command (`auth`, `channels`, `users`, 
 
 ## How it works
 
-Slack for Mac stores its session as two pieces:
+The Slack desktop app stores its session as two pieces:
 
-- A per-workspace `xoxc-…` token in a LevelDB store under `~/Library/.../Slack/Local Storage/leveldb/`.
-- An account-level `xoxd-…` session cookie in a SQLite Cookies file, encrypted with AES-128-CBC using a passphrase from your macOS Keychain (entry: "Slack Safe Storage").
+- A per-workspace `xoxc-…` token in a LevelDB store under the Slack data directory's `Local Storage/leveldb/`.
+- An account-level `xoxd-…` session cookie in a SQLite Cookies file, encrypted with AES-128-CBC.
 
 `spy` copies those files to `/tmp` (Slack holds exclusive locks on the originals while running), decrypts the cookie in pure Go, scans LevelDB for token candidates, and validates each one via Slack's `auth.test` to learn the team identity. Tokens are cached at `~/.local/spy/workspaces/<team_id>/workspace.json` (mode `0600`) and reused on subsequent runs. If a token goes stale, `spy` re-extracts on the next `invalid_auth`.
 
-The only shellout is `security find-generic-password` to read the Keychain entry — everything else is pure Go.
+Only two things differ by platform — where the Slack directory lives, and how the cookie's AES key is obtained:
+
+| | Slack data directory | Cookie AES key |
+| --- | --- | --- |
+| **macOS** | `~/Library/Application Support/Slack` (direct download), or the `com.tinyspeck.slackmacgap` App Store container | the "Slack Safe Storage" password from the login Keychain (PBKDF2-SHA1, 1003 iterations) |
+| **Linux** | `~/.config/Slack` (native), or the Snap / Flatpak equivalents | `v10` cookies use Chromium's hardcoded `"peanuts"` key; `v11` cookies use the "Slack Safe Storage" key from the freedesktop Secret Service (GNOME Keyring, KWallet, …) read over D-Bus (PBKDF2-SHA1, 1 iteration) |
+
+The only shellout anywhere is `security find-generic-password` on macOS to read the Keychain entry. The Linux Secret Service lookup is pure-Go D-Bus, and everything else — the cookie decrypt, the LevelDB scan, the Web API client — is pure Go on both platforms.
 
 ## Cache
 
