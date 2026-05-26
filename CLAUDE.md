@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`spy` is a macOS-only Slack CLI written in Go. It auto-authenticates by lifting the signed-in user's token and cookie out of the local Slack desktop app — there is no OAuth flow, no app install, no token entry. It is a rewrite of a Node.js predecessor; the rewrite exists specifically to eliminate that tool's Python/openssl/sqlite3/curl shellouts (only `security` for Keychain remains), replace manual arg parsing with cobra, add `--json` output, and prepare for an MCP server mode.
+`spy` is a macOS + Linux Slack CLI written in Go. It auto-authenticates by lifting the signed-in user's token and cookie out of the local Slack desktop app — there is no OAuth flow, no app install, no token entry. It is a rewrite of a Node.js predecessor; the rewrite exists specifically to eliminate that tool's Python/openssl/sqlite3/curl shellouts (the only remaining shellout is macOS's `security` for the Keychain; Linux reads the Secret Service over pure-Go D-Bus), replace manual arg parsing with cobra, add `--json` output, and prepare for an MCP server mode.
 
 ## Build / run
 
@@ -15,7 +15,7 @@ go vet ./...                         # lint
 go test ./...                        # tests (none yet)
 ```
 
-There is no Makefile. The first invocation that touches the Keychain will trigger a macOS "Always Allow" prompt — that is the user's job to click, not a bug.
+There is no Makefile. On macOS, the first invocation that touches the Keychain triggers an "Always Allow" prompt — that is the user's job to click, not a bug. On Linux, if the login keyring is locked the Secret Service may pop a one-time unlock dialog (only for `v11` cookies; `v10`/"peanuts" needs none).
 
 ## Global flags (defined on `rootCmd`)
 
@@ -54,10 +54,23 @@ Higher layers depend on lower layers only. `internal/slack` imports `internal/au
 
 The flow `auth.DefaultSource()` → `auth.SharedCookie()` + `auth.ListWorkspaces()` produces a `Workspace` (`team_id`, `team_domain`, `user_*`, `token`) plus a shared `cookie`.
 
-- Slack stores its session as two pieces: a per-workspace `xoxc-...` token (in LevelDB) and an account-level `xoxd-...` cookie (in the Cookies SQLite DB, AES-128-CBC encrypted by a Keychain-stored passphrase). One cookie unlocks every workspace.
-- `internal/auth/cookies.go` does the cookie decrypt: `security` shellout for the keychain key → PBKDF2-SHA1 (salt `"saltysalt"`, **1003 iterations**, 16 bytes) → AES-128-CBC with a 16-space IV → PKCS7 unpad → strip `v10` prefix. The constants are not negotiable; they are what Chromium uses.
-- `internal/auth/leveldb.go` reads the LevelDB store via `github.com/syndtr/goleveldb`. **Both the Cookies DB and the LevelDB dir must be copied to /tmp before opening** — Slack holds exclusive locks while running. An earlier approach failed when Slack compacted the LevelDB with Snappy; goleveldb handles Snappy natively, which is why we use it instead of grepping raw `.ldb` files.
-- App Store and direct-download installs have different paths and different Keychain account names. `Source` probes both; `KeychainKey(isAppStore)` tries account names in a specific order.
+- Slack stores its session as two pieces: a per-workspace `xoxc-...` token (in LevelDB) and an account-level `xoxd-...` cookie (in the Cookies SQLite DB, AES-128-CBC encrypted). One cookie unlocks every workspace.
+- `internal/auth/cookies.go` does the **platform-neutral** cookie decrypt: read `encrypted_value` from SQLite → read its 3-byte `v10`/`v11` prefix → ask the platform for `(password, iterations)` → `aesDecrypt` runs PBKDF2-SHA1 (salt `"saltysalt"`, 16 bytes) → AES-128-CBC with a 16-space IV → PKCS7 unpad → strip to `xoxd-`. The salt/IV/padding are what Chromium uses and are not negotiable.
+- `internal/auth/leveldb.go` reads the LevelDB store via `github.com/syndtr/goleveldb`. **Both the Cookies DB and the LevelDB dir must be copied to /tmp before opening** — Slack holds exclusive locks while running. An earlier approach failed when Slack compacted the LevelDB with Snappy; goleveldb handles Snappy natively, which is why we use it instead of grepping raw `.ldb` files. This file is already cross-platform; only the directory path differs by OS.
+
+#### Platform split (Go build tags)
+
+The only OS-specific concerns are **where the Slack dir lives** and **how the cookie key is obtained**. Each is a per-platform file selected by `//go:build`:
+
+| Concern | Shared | `//go:build darwin` | `//go:build linux` |
+|---|---|---|---|
+| Slack dir probe | `source.go` (`DefaultSource`) | `source_darwin.go` (`discoverSlackDir`) | `source_linux.go` (`discoverSlackDir`) |
+| Cookie key | `cookies.go` (`DecryptCookie`, `aesDecrypt`) | `keychain_darwin.go` (`cookieKey`) | `keyring_linux.go` (`cookieKey`) |
+
+- The shared `DecryptCookie` calls `cookieKey(src, prefix) ([]byte, int, error)`, implemented once per platform. **This is the seam** — add new platform support by adding another `source_<os>.go` + `<os>` key file, nothing else.
+- **macOS**: `cookieKey` ignores the prefix and returns `(KeychainKey, 1003)`. `KeychainKey(isAppStore)` does the `security` shellout, trying App-Store vs direct-download account names in order. App Store and direct-download installs also have different *paths* — `discoverSlackDir` probes both and sets `IsAppStore`.
+- **Linux**: the prefix decides the key. `v10` → hardcoded `"peanuts"`, `1` iteration; `v11` → key from the freedesktop Secret Service (GNOME Keyring/KWallet) read over pure-Go D-Bus (`github.com/godbus/dbus/v5`, Linux-only at link time), still `1` iteration. **Iteration count is the load-bearing difference: 1003 on macOS, 1 on Linux.** `discoverSlackDir` probes native (`~/.config/Slack`), Snap, and Flatpak paths.
+- The Secret Service lookup matches the keyring item by attribute (`application`), falling back to the `"Slack Safe Storage"` label; a locked keyring is unlocked via the D-Bus `Prompt` flow (`keyring_linux.go`).
 
 ### Multi-workspace model
 
