@@ -17,13 +17,16 @@ import (
 )
 
 // DecryptCookie reads the encrypted `d` cookie from Slack's SQLite cookie
-// store and decrypts it with the Keychain-derived key.
+// store and decrypts it.
 //
-// Format: leading "v10" prefix + AES-128-CBC ciphertext, key derived via
-// PBKDF2-SHA1(password="<keychain key>", salt="saltysalt", iter=1003, len=16),
-// IV = 16 space bytes, PKCS7 padding.
-func DecryptCookie(cookiesDB string, keychainKey []byte) (string, error) {
-	tmp, err := copyToTemp(cookiesDB)
+// The encrypted value is a 3-byte version prefix ("v10"/"v11") + AES-128-CBC
+// ciphertext. The prefix selects the key source and iteration count, which
+// differ per platform: cookieKey (implemented in keychain_darwin.go /
+// keyring_linux.go) resolves the prefix to a (password, iterations) pair. The
+// AES-128-CBC pipeline itself — PBKDF2-SHA1(salt="saltysalt", len=16), a
+// 16-space IV, and PKCS7 padding — is identical everywhere.
+func DecryptCookie(src *Source) (string, error) {
+	tmp, err := copyToTemp(src.CookiesDB)
 	if err != nil {
 		return "", fmt.Errorf("copy cookies db: %w", err)
 	}
@@ -44,20 +47,47 @@ func DecryptCookie(cookiesDB string, keychainKey []byte) (string, error) {
 		return "", fmt.Errorf("read cookie row: %w", err)
 	}
 
-	if len(encrypted) < 3 || !bytes.Equal(encrypted[:3], []byte("v10")) {
-		return "", errors.New("unknown cookie encryption format (expected v10 prefix)")
+	if len(encrypted) < 3 {
+		return "", errors.New("cookie value too short to contain a version prefix")
 	}
-	ct := encrypted[3:]
-	if len(ct)%aes.BlockSize != 0 {
-		return "", fmt.Errorf("ciphertext length %d is not a multiple of AES block size", len(ct))
+	prefix := string(encrypted[:3])
+	if prefix != "v10" && prefix != "v11" {
+		return "", fmt.Errorf("unknown cookie encryption format (expected v10/v11 prefix, got %q)", prefix)
 	}
 
-	aesKey := pbkdf2.Key(keychainKey, []byte("saltysalt"), 1003, 16, sha1.New)
+	password, iterations, err := cookieKey(src, prefix)
+	if err != nil {
+		return "", err
+	}
+
+	pt, err := aesDecrypt(encrypted[3:], password, iterations)
+	if err != nil {
+		return "", err
+	}
+
+	text := string(pt)
+	idx := strings.Index(text, "xoxd-")
+	if idx < 0 {
+		return "", errors.New("no xoxd- prefix found in decrypted cookie")
+	}
+	return text[idx:], nil
+}
+
+// aesDecrypt runs Chromium's cookie/credential CBC scheme: derive a 16-byte
+// AES-128 key via PBKDF2-SHA1(password, salt="saltysalt", iterations), decrypt
+// with a 16-space IV, and strip PKCS7 padding. The iteration count is the only
+// parameter that varies by platform (1003 on macOS, 1 on Linux).
+func aesDecrypt(ct, password []byte, iterations int) ([]byte, error) {
+	if len(ct)%aes.BlockSize != 0 {
+		return nil, fmt.Errorf("ciphertext length %d is not a multiple of AES block size", len(ct))
+	}
+
+	aesKey := pbkdf2.Key(password, []byte("saltysalt"), iterations, 16, sha1.New)
 	iv := bytes.Repeat([]byte{' '}, aes.BlockSize)
 
 	block, err := aes.NewCipher(aesKey)
 	if err != nil {
-		return "", fmt.Errorf("aes cipher: %w", err)
+		return nil, fmt.Errorf("aes cipher: %w", err)
 	}
 	mode := cipher.NewCBCDecrypter(block, iv)
 
@@ -71,13 +101,7 @@ func DecryptCookie(cookiesDB string, keychainKey []byte) (string, error) {
 			pt = pt[:n-padLen]
 		}
 	}
-
-	text := string(pt)
-	idx := strings.Index(text, "xoxd-")
-	if idx < 0 {
-		return "", errors.New("no xoxd- prefix found in decrypted cookie")
-	}
-	return text[idx:], nil
+	return pt, nil
 }
 
 // copyToTemp copies a file to a tempfile so we can read SQLite databases

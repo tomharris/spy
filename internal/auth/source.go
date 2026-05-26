@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -9,7 +8,9 @@ import (
 // Source describes where Slack credentials live on disk and where we
 // cache discovered workspaces.
 type Source struct {
-	SlackDir      string
+	SlackDir string
+	// IsAppStore is set only on macOS (Mac App Store sandbox build); it
+	// selects Keychain account-name order. Always false on Linux.
 	IsAppStore    bool
 	CookiesDB     string
 	LevelDBDir    string
@@ -18,33 +19,20 @@ type Source struct {
 	WorkspacesDir string
 }
 
-// DefaultSource probes the two standard macOS Slack data directories
-// (direct download and Mac App Store sandbox) and returns the first one
-// that exists.
+// DefaultSource locates the Slack desktop data directory for the current OS
+// (see discoverSlackDir, implemented per-platform) and derives the cookie
+// store, LevelDB, and spy cache paths from it. The Cookies and
+// Local Storage/leveldb subpaths are identical across macOS and Linux; only
+// the base directory probe is platform-specific.
 func DefaultSource() (*Source, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
-	direct := filepath.Join(home, "Library", "Application Support", "Slack")
-	appstore := filepath.Join(home,
-		"Library", "Containers", "com.tinyspeck.slackmacgap",
-		"Data", "Library", "Application Support", "Slack")
 
-	var (
-		slackDir   string
-		isAppStore bool
-	)
-	switch {
-	case dirExists(direct):
-		slackDir = direct
-	case dirExists(appstore):
-		slackDir = appstore
-		isAppStore = true
-	default:
-		return nil, fmt.Errorf(
-			"could not find Slack data directory.\nChecked:\n  %s\n  %s\nIs Slack installed?",
-			direct, appstore)
+	slackDir, isAppStore, err := discoverSlackDir(home)
+	if err != nil {
+		return nil, err
 	}
 
 	cacheDir := filepath.Join(home, ".local", "spy")

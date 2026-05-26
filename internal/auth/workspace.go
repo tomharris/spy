@@ -53,17 +53,14 @@ var (
 	cookieErr  error
 )
 
-// SharedCookie returns the macOS Slack session cookie (the `xoxd-...`
-// payload of the `d` cookie). Decrypted at most once per process — the
-// cookie is account-level, shared across every workspace.
+// SharedCookie returns the Slack session cookie (the `xoxd-...` payload of the
+// `d` cookie). Decrypted at most once per process — the cookie is
+// account-level, shared across every workspace. Key acquisition (macOS
+// Keychain vs Linux Secret Service / "peanuts") is handled inside
+// DecryptCookie by the platform-specific cookieKey.
 func SharedCookie(src *Source) (string, error) {
 	cookieOnce.Do(func() {
-		key, kerr := KeychainKey(src.IsAppStore)
-		if kerr != nil {
-			cookieErr = kerr
-			return
-		}
-		cookieVal, cookieErr = DecryptCookie(src.CookiesDB, key)
+		cookieVal, cookieErr = DecryptCookie(src)
 	})
 	return cookieVal, cookieErr
 }

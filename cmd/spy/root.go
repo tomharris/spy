@@ -24,7 +24,7 @@ const workspaceEnvVar = "SPY_WORKSPACE"
 
 var rootCmd = &cobra.Command{
 	Use:           "spy",
-	Short:         "Slack CLI for macOS — auto-auth from the Slack desktop app",
+	Short:         "Slack CLI — auto-auth from the Slack desktop app (macOS & Linux)",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }

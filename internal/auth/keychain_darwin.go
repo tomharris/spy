@@ -1,3 +1,5 @@
+//go:build darwin
+
 package auth
 
 import (
@@ -5,6 +7,21 @@ import (
 	"errors"
 	"os/exec"
 )
+
+// macOS Chromium derives the cookie AES key from the Keychain "Safe Storage"
+// password with 1003 PBKDF2 iterations, regardless of the v10/v11 prefix.
+const darwinIterations = 1003
+
+// cookieKey resolves a cookie version prefix to the (password, iterations)
+// pair aesDecrypt needs. On macOS the password is always the Keychain
+// "Slack Safe Storage" key; the prefix is not used.
+func cookieKey(src *Source, _prefix string) ([]byte, int, error) {
+	key, err := KeychainKey(src.IsAppStore)
+	if err != nil {
+		return nil, 0, err
+	}
+	return key, darwinIterations, nil
+}
 
 // KeychainKey fetches the "Slack Safe Storage" password from the macOS
 // Keychain. Account names differ between the direct-download build and the
