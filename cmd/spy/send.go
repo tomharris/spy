@@ -11,6 +11,8 @@ import (
 	"github.com/tomharris/spy/internal/slack"
 )
 
+var sendThreadTS string
+
 type sendResult struct {
 	slack.BaseResponse
 	Channel string `json:"channel"`
@@ -28,7 +30,7 @@ var sendCmd = &cobra.Command{
 			return err
 		}
 		text := strings.Join(args[1:], " ")
-		res, err := runSend(cmd.Context(), client, r, args[0], text)
+		res, err := runSend(cmd.Context(), client, r, args[0], text, sendThreadTS)
 		if err != nil {
 			return err
 		}
@@ -40,21 +42,26 @@ var sendCmd = &cobra.Command{
 	},
 }
 
-func runSend(ctx context.Context, client *slack.Client, r *resolve.Resolver, channelRef, text string) (*sendResult, error) {
+func runSend(ctx context.Context, client *slack.Client, r *resolve.Resolver, channelRef, text, threadTS string) (*sendResult, error) {
 	channelID, err := r.ResolveChannel(ctx, channelRef)
 	if err != nil {
 		return nil, err
 	}
-	var res sendResult
-	if err := client.Call(ctx, "chat.postMessage", map[string]any{
+	params := map[string]any{
 		"channel": channelID,
 		"text":    text,
-	}, &res); err != nil {
+	}
+	if threadTS != "" {
+		params["thread_ts"] = threadTS
+	}
+	var res sendResult
+	if err := client.Call(ctx, "chat.postMessage", params, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
 }
 
 func init() {
+	sendCmd.Flags().StringVar(&sendThreadTS, "thread", "", "reply in this thread (parent message ts)")
 	rootCmd.AddCommand(sendCmd)
 }
