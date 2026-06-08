@@ -223,6 +223,7 @@ func registerReadTools(server *mcp.Server, client *slack.Client, r *resolve.Reso
 type sendArgs struct {
 	Channel string `json:"channel" jsonschema:"channel reference (see read tool)"`
 	Text    string `json:"text" jsonschema:"message text — plain or Slack mrkdwn"`
+	Thread  string `json:"thread,omitempty" jsonschema:"optional parent message ts to reply in a thread"`
 }
 
 type reactArgs struct {
@@ -261,7 +262,7 @@ func registerWriteTools(server *mcp.Server, client *slack.Client, r *resolve.Res
 		Name:        "send",
 		Description: "Send a message to a channel or DM. Returns the posted message's timestamp.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a sendArgs) (*mcp.CallToolResult, *sendResult, error) {
-		res, err := runSend(ctx, client, r, a.Channel, a.Text)
+		res, err := runSend(ctx, client, r, a.Channel, a.Text, a.Thread)
 		return nil, res, err
 	})
 
