@@ -69,7 +69,8 @@ On **Linux**, if your login keyring is locked you may get a one-time unlock dial
 | Command | Alias | What it does |
 | --- | --- | --- |
 | `spy send <channel\|@user> <msg...>` | `s` | Send a message |
-| `spy react <channel> <ts> <emoji>` | | Add an emoji reaction |
+| `spy react <channel> <ts> <emoji>` | | Add an emoji reaction (no-op if already present) |
+| `spy unreact <channel> <ts> <emoji>` | | Remove your emoji reaction (no-op if absent) |
 | `spy draft <channel> <msg...>` | | Save a draft (appears in Slack UI) |
 | `spy draft thread <channel> <ts> <msg...>` | | Save a draft thread reply |
 | `spy draft user <user> <msg...>` | | Save a draft DM |
@@ -149,7 +150,7 @@ Claude Code (`claude mcp add`):
 claude mcp add spy /absolute/path/to/spy mcp -e SPY_WORKSPACE=acme
 ```
 
-The server registers tools for every read command (`auth`, `channels`, `users`, `dms`, `read`, `thread`, `search`, `pins`, `activity`, `unread`, `starred`, `saved`, `drafts_list`) and every write command (`send`, `react`, `draft_channel`, `draft_thread`, `draft_user`, `draft_drop`). Tool arguments mirror the CLI flags; channel references accept the same forms (names, `@handle`, user IDs, channel IDs).
+The server registers tools for every read command (`auth`, `channels`, `users`, `dms`, `read`, `thread`, `search`, `pins`, `activity`, `unread`, `starred`, `saved`, `drafts_list`) and every write command (`send`, `react`, `unreact`, `draft_channel`, `draft_thread`, `draft_user`, `draft_drop`). Tool arguments mirror the CLI flags; channel references accept the same forms (names, `@handle`, user IDs, channel IDs).
 
 ## How it works
 

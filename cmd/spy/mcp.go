@@ -270,7 +270,15 @@ func registerWriteTools(server *mcp.Server, client *slack.Client, r *resolve.Res
 		Name:        "react",
 		Description: "Add an emoji reaction to a message.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a reactArgs) (*mcp.CallToolResult, *reactResult, error) {
-		res, err := runReact(ctx, client, r, a.Channel, a.TS, a.Emoji)
+		res, err := runReaction(ctx, client, r, "reactions.add", "already_reacted", a.Channel, a.TS, a.Emoji)
+		return nil, res, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "unreact",
+		Description: "Remove your emoji reaction from a message.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a reactArgs) (*mcp.CallToolResult, *reactResult, error) {
+		res, err := runReaction(ctx, client, r, "reactions.remove", "no_reaction", a.Channel, a.TS, a.Emoji)
 		return nil, res, err
 	})
 
